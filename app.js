@@ -1,5 +1,6 @@
 const express = require('express')
 const mongoose = require('mongoose')
+const cors = require("cors");
 
 
 
@@ -7,6 +8,7 @@ const dbURL = "mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/myFirstDa
 
 const app = express()
 app.use(express.json())
+app.use(cors());
 app.use(express.urlencoded({ extended: false }))
 
 const PORT = process.env.PORT||5000

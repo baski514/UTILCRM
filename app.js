@@ -62,7 +62,9 @@ app.get('/getFieldsOfObject/:obj_name',async (req, res, next) => {
     try {
         var schema = await mongoose.model(req.params.obj_name).schema
         if(schema){
-            return res.status(200).json({status:true,msg:schema.paths})
+            const fields = Object.values(schema.paths);
+
+            return res.status(200).json({status:true,msg:fields})
         }else{
             return res.status(400).json({status:false,msg:'Error to find your object'})
         }

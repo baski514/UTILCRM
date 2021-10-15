@@ -40,13 +40,15 @@ app.post('/createObject',async(req,res,next)=>{
     
     try{
         var newObj = new mongoose.Schema(fields);
-        mongoose.model(req.body.modelName, newObj).apply;
+        // module.exports = mongoose.model(req.body.modelName, newObj);
+        mongoose.model(req.body.modelName, newObj);
         return res.status(200).json({status:true,msg:'New Object Created'})
     }catch(error){
         console.log(error)
         return res.status(400).json({status:false,msg:error})
     }
 })
+//
 
 app.get('/getObjects',async(req,res,next)=>{
     console.log("ReqBody",req.body);

@@ -60,7 +60,7 @@ app.get('/greetme',async(req,res,next)=>{
 
 /**
  * @swagger 
- * /createObject:
+ * /object:
  *   post:
  *    consumes:
  *    - application/json
@@ -88,7 +88,7 @@ app.get('/greetme',async(req,res,next)=>{
  *        description: Error to create new object
  *  
  */
-app.post('/createObject',async(req,res,next)=>{
+app.post('/object',async(req,res,next)=>{
     console.log("ReqBody",req.body);
     
     let fields = {}
@@ -102,7 +102,34 @@ app.post('/createObject',async(req,res,next)=>{
     try{
         var newObj = new mongoose.Schema(fields);
         mongoose.model(req.body.modelName, newObj);
-        return res.status(200).json({status:true,msg:'New Object Created'})
+        return res.status(200).json({
+            status:true,
+            msg:'New Object Created',
+
+            request:{
+                type:'POST',
+                url: `http://localhost:5000/field/${req.body.modelName}`
+            }
+            ,
+            // request:[
+            //     {
+            //         type:'GET',
+            //         url: `http://localhost:5000/record/${req.body.modelName}`
+            //     },
+            //     {
+            //         type:'POST',
+            //         url: `http://localhost:5000/record/${req.body.modelName}`
+            //     },
+            //     {
+            //         type:'PATCH',
+            //         url: `http://localhost:5000/record/${req.body.modelName}/{id}`
+            //     },
+            //     {
+            //         type:'DELETE',
+            //         url: `http://localhost:5000/record/${req.body.modelName}/{id}`
+            //     }
+            // ]
+        })
     }catch(error){
         console.log(error)
         return res.status(400).json({status:false,msg:error})
@@ -112,7 +139,7 @@ app.post('/createObject',async(req,res,next)=>{
 
 /**
  * @swagger
- * /getObjects:
+ * /object:
  *   get:
  *    description: Get all objects
  *    responses:
@@ -120,7 +147,7 @@ app.post('/createObject',async(req,res,next)=>{
  *        description: Success
  * 
  */
-app.get('/getObjects',async(req,res,next)=>{
+app.get('/object',async(req,res,next)=>{
     console.log("ReqBody",req.body);
     const collections = Object.keys(mongoose.connection.collections); 
     return res.status(200).json({status:true,msg:collections})
@@ -128,7 +155,7 @@ app.get('/getObjects',async(req,res,next)=>{
 
 /**
  * @swagger
- * /getFieldsOfObject/{obj_name}:
+ * /field/{obj_name}:
  *   get:
  *    desciption: Get fields
  *    parameters:
@@ -141,7 +168,7 @@ app.get('/getObjects',async(req,res,next)=>{
  *      '200': 
  *        description: Success
  */
-app.get('/getFieldsOfObject/:obj_name',async (req, res, next) => {
+app.get('/field/:obj_name',async (req, res, next) => {
     console.log("ObjectName",req.params.obj_name)
     try {
         var schema = await mongoose.model(req.params.obj_name).schema
@@ -161,7 +188,7 @@ app.get('/getFieldsOfObject/:obj_name',async (req, res, next) => {
 
 /**
  * @swagger 
- * /addField:
+ * /field:
  *   post:
  *    consumes:
  *    - application/json
@@ -194,7 +221,7 @@ app.get('/getFieldsOfObject/:obj_name',async (req, res, next) => {
  *        description: Error to create new object
  *  
  */
-app.post('/addField',async(req,res,next)=>{
+app.post('/field',async(req,res,next)=>{
     console.log("ReqBody",req.body);
 
     try {
@@ -224,7 +251,7 @@ app.post('/addField',async(req,res,next)=>{
 
 /**
  * @swagger 
- * /createRecord:
+ * /record:
  *   post:
  *    consumes:
  *    - application/json
@@ -254,27 +281,37 @@ app.post('/addField',async(req,res,next)=>{
  *        description: Error to create new object
  *  
  */
-app.post('/createRecord',async(req,res,next)=>{
+app.post('/record',async(req,res,next)=>{
     console.log("ReqBody",req.body);
     if(!req.body){
         return res.status(400).json({status:false,msg:'Body is not expected'})
     }else{
         var schema = await mongoose.model(req.body.obj_name)
-        const record = new schema(req.body).save(function (err) {
+        const record = new schema(req.body).save(function (err,res) {
+            console.log("RES",res)
             if (err) return res.status(400).json({status:false,msg:'Error to create record'})
-            else return res.status(200).json({status:true,msg:req.body})
+            else return res.status(200).json({
+                status:true,
+                msg:req.body,
+                endPoint:[
+                    {
+                        type:'GET',
+                        url: `http://localhost:5000/record/${req.body.obj_name}`
+                    }
+                ]
+            })
           });
     }
 })
 
 /**
  * @swagger
- * /getrecords/{obj_name}:
+ * /record/{obj}:
  *   get:
  *    desciption: Get fields
  *    parameters:
  *     - in: path
- *       name: obj_name
+ *       name: obj
  *       schema:
  *        type: string
  *       required: true
@@ -282,12 +319,12 @@ app.post('/createRecord',async(req,res,next)=>{
  *      '200': 
  *        description: Success
  */
-app.get('/getrecords/:obj_name',async(req,res,next)=>{
+app.get('/record/:obj',async(req,res,next)=>{
     console.log("ReqBody",req.body);
     if(!req.body){
         return res.status(400).json({status:false,msg:'Body is not expected'})
     }else{
-        var schema = await mongoose.model(req.params.obj_name)
+        var schema = await mongoose.model(req.params.obj)
         schema.find()
         .exec()
         .then(doc=>{
@@ -302,7 +339,7 @@ app.get('/getrecords/:obj_name',async(req,res,next)=>{
 
 /**
  * @swagger 
- * /updaterecord/{id}:
+ * /record/{obj}/{id}:
  *   patch:
  *    consumes:
  *    - application/json
@@ -339,13 +376,13 @@ app.get('/getrecords/:obj_name',async(req,res,next)=>{
  *  
  */
 
-app.patch('/updaterecord/:id',async(req,res,next)=>{
+app.patch('/record/:obj/:id',async(req,res,next)=>{
     console.log("ReqBody",req.body);
 
     if(!req.body){
         return res.status(400).json({status:false,msg:'Body is not expected'})
     }else{
-        var schema = await mongoose.model(req.body.obj_name)
+        var schema = await mongoose.model(req.params.obj)
 
         let resp = await schema.findOne({'_id':req.params.id});
         if(resp){
@@ -363,7 +400,7 @@ app.patch('/updaterecord/:id',async(req,res,next)=>{
 
 /**
  * @swagger 
- * /deleterecord/{id}:
+ * /record/{obj}/{id}:
  *   delete:
  *    consumes:
  *    - application/json
@@ -396,13 +433,12 @@ app.patch('/updaterecord/:id',async(req,res,next)=>{
  *        description: Error to create new object
  *  
  */
-app.delete('/deleterecord/:id',async(req,res,next)=>{
+app.delete('/record/:obj/:id',async(req,res,next)=>{
     console.log("ReqBody",req.body);
     if(!req.body){
         return res.status(400).json({status:false,msg:'Body is not expected'})
     }else{
-        var schema = await mongoose.model(req.body.obj_name)
-
+        var schema = await mongoose.model(req.params.obj)
         let resp = await schema.findOne({'_id':req.params.id});
         if(resp){
             resp = req.body

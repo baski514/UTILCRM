@@ -1,47 +1,45 @@
-const express = require('express')
-const mongoose = require('mongoose')
-const cors = require("cors");
-const swaggerJsDoc = require('swagger-jsdoc');
-const swaggerUi = require('swagger-ui-express'); 
+const express = require ('express');
+const mongoose = require ('mongoose');
+const cors = require ('cors');
+const swaggerJsDoc = require ('swagger-jsdoc');
+const swaggerUi = require ('swagger-ui-express');
+const API_URL = 'http://localhost:5000/'
 
+const dbURL =
+  'mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/myFirstDatabase?retryWrites=true&w=majority';
 
-
-const dbURL = "mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/myFirstDatabase?retryWrites=true&w=majority"
-
-const app = express()
+const app = express ();
 
 const swaggerOptions = {
-    swaggerDefinition:{
-        info:{
-            title:'CRM API',
-            version:'1.0.0',
-            description:'API INFO',
-            servers:["http://localhost:5000"]
-        }
+  swaggerDefinition: {
+    info: {
+      title: 'CRM API',
+      version: '1.0.0',
+      description: 'API INFO',
+      servers: ['http://localhost:5000'],
     },
-    apis:['app.js'],
+  },
+  apis: ['app.js'],
 };
 
-const swaggerDocs = swaggerJsDoc(swaggerOptions);
-console.log(swaggerDocs);
-app.use('/api-docs',swaggerUi.serve,swaggerUi.setup(swaggerDocs));
+const swaggerDocs = swaggerJsDoc (swaggerOptions);
+console.log (swaggerDocs);
+app.use ('/api-docs', swaggerUi.serve, swaggerUi.setup (swaggerDocs));
 
+app.use (express.json ());
+app.use (cors ());
+app.use (express.urlencoded ({extended: false}));
 
+const PORT = process.env.PORT || 5000;
 
-app.use(express.json())
-app.use(cors());
-app.use(express.urlencoded({ extended: false }))
-
-const PORT = process.env.PORT||5000
-
-mongoose.connect(dbURL,{useNewUrlParser:true,useUnifiedTopology:true})
-    .then(() => {
-        console.log('db Connected')
-    })
-    .catch((err) => {
-        console.log('Failed to connect db' +err)
-})
-
+mongoose
+  .connect (dbURL, {useNewUrlParser: true, useUnifiedTopology: true})
+  .then (() => {
+    console.log ('db Connected');
+  })
+  .catch (err => {
+    console.log ('Failed to connect db' + err);
+  });
 
 /**
  * @swagger
@@ -53,14 +51,13 @@ mongoose.connect(dbURL,{useNewUrlParser:true,useUnifiedTopology:true})
  *        description: Success
  * 
  */
-app.get('/greetme',async(req,res,next)=>{
-    res.status(200).json({'message':'Own by UtilLabs'})
-})
-
+app.get ('/greetme', async (req, res, next) => {
+  res.status (200).json ({message: 'Own by UtilLabs'});
+});
 
 /**
  * @swagger 
- * /createObject:
+ * /object:
  *   post:
  *    consumes:
  *    - application/json
@@ -88,31 +85,68 @@ app.get('/greetme',async(req,res,next)=>{
  *        description: Error to create new object
  *  
  */
-app.post('/createObject',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
-    
-    let fields = {}
-    if(req.body.fields){
-        fields = req.body.fields
-    }else{
-        fields.Id = {type:String}
-        fields.Name = {type:String}
-    }
-    
-    try{
-        var newObj = new mongoose.Schema(fields);
-        mongoose.model(req.body.modelName, newObj);
-        return res.status(200).json({status:true,msg:'New Object Created'})
-    }catch(error){
-        console.log(error)
-        return res.status(400).json({status:false,msg:error})
-    }
-})
+
+//createObject
+app.post ('/object', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
+
+  let fields = {};
+  if (req.body.fields) {
+    fields = req.body.fields;
+  } else {
+    fields.Id = {type: String};
+    fields.Name = {type: String};
+  }
+
+  try {
+    var newObj = new mongoose.Schema (fields);
+    mongoose.model (req.body.modelName, newObj);
+    return res.status (200).json ({
+      status: true,
+      msg: 'New Object Created',
+
+      request:[
+          {
+              type:'GET',
+              url: `${API_URL}record/${req.body.modelName}`
+          },
+          
+          {
+              type:'POST',
+              url: `${API_URL}record/${req.body.modelName}`
+          },
+          {
+              type:'GET',
+              url: `${API_URL}record/${req.body.modelName}/{id}`
+          },
+          {
+              type:'PATCH',
+              url: `${API_URL}record/${req.body.modelName}/{id}`
+          },
+          {
+              type:'DELETE',
+              url: `${API_URL}record/${req.body.modelName}/{id}`
+          },
+            {
+                type: 'POST',
+                url: `${API_URL}field/${req.body.modelName}`,
+            },
+            {
+                type: 'GET',
+                url: `${API_URL}field/${req.body.modelName}`,
+            }
+      ]
+    });
+  } catch (error) {
+    console.log (error);
+    return res.status (400).json ({status: false, msg: error});
+  }
+});
 //
 
 /**
  * @swagger
- * /getObjects:
+ * /object:
  *   get:
  *    description: Get all objects
  *    responses:
@@ -120,15 +154,18 @@ app.post('/createObject',async(req,res,next)=>{
  *        description: Success
  * 
  */
-app.get('/getObjects',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
-    const collections = Object.keys(mongoose.connection.collections); 
-    return res.status(200).json({status:true,msg:collections})
-})
+
+//getObject
+
+app.get ('/object', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
+  const collections = Object.keys (mongoose.connection.collections);
+  return res.status (200).json ({status: true, msg: collections});
+});
 
 /**
  * @swagger
- * /getFieldsOfObject/{obj_name}:
+ * /field/{obj}:
  *   get:
  *    desciption: Get fields
  *    parameters:
@@ -141,27 +178,33 @@ app.get('/getObjects',async(req,res,next)=>{
  *      '200': 
  *        description: Success
  */
-app.get('/getFieldsOfObject/:obj_name',async (req, res, next) => {
-    console.log("ObjectName",req.params.obj_name)
-    try {
-        var schema = await mongoose.model(req.params.obj_name).schema
-        if(schema){
-            const fields = Object.values(schema.paths);
 
-            return res.status(200).json({status:true,msg:fields})
-        }else{
-            return res.status(400).json({status:false,msg:'Error to find your object'})
-        }
-    } catch (error) {
-        console.log(error)
-        return res.status(400).json({status:false,msg:'Error to find your object'})
+
+//getFields
+app.get ('/field/:obj', async (req, res, next) => {
+  console.log ('ObjectName', req.params.obj_name);
+  try {
+    var schema = await mongoose.model (req.params.obj).schema;
+    if (schema) {
+      const fields = Object.values (schema.paths);
+
+      return res.status (200).json ({status: true, msg: fields});
+    } else {
+      return res
+        .status (400)
+        .json ({status: false, msg: 'Error to find your object'});
     }
-})
-
+  } catch (error) {
+    console.log (error);
+    return res
+      .status (400)
+      .json ({status: false, msg: 'Error to find your object'});
+  }
+});
 
 /**
  * @swagger 
- * /addField:
+ * /field/{obj}:
  *   post:
  *    consumes:
  *    - application/json
@@ -194,37 +237,45 @@ app.get('/getFieldsOfObject/:obj_name',async (req, res, next) => {
  *        description: Error to create new object
  *  
  */
-app.post('/addField',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
 
-    try {
-        var schema = await mongoose.model(req.body.obj_name).schema
-        let fields;
+//createField
+app.post ('/field/:obj', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
 
-        if(req.body.fieldType){
-            switch(req.body.fieldType){
-                case "String":
-                    fields = {[req.body.fieldName]:{type:String}}
-                    break;
-                case "Number":
-                    fields = {[req.body.fieldName]:{type:Number}}
-                    break;    
-            }
-        }
-        schema.add(fields)
-        res.status(200).json({
-            status:true,
-            msg:'New Field created'
-        })
-    } catch (error) {
-        console.log(error)
-        return res.status(400).json({status:false,msg:error})
+  try {
+    var schema = await mongoose.model (req.params.obj).schema;
+    let fields;
+
+    if (req.body.fieldType) {
+      switch (req.body.fieldType) {
+        case 'String':
+          fields = {[req.body.fieldName]: {type: String}};
+          break;
+        case 'Number':
+          fields = {[req.body.fieldName]: {type: Number}};
+          break;
+      }
     }
-})
+    schema.add (fields);
+    res.status (200).json ({
+      status: true,
+      msg: 'New Field created',
+      request:[
+          {
+              type:'GET',
+              url:`${API_URL}field/${req.params.obj}`
+          }
+      ]
+    });
+  } catch (error) {
+    console.log (error);
+    return res.status (400).json ({status: false, msg: error});
+  }
+});
 
 /**
  * @swagger 
- * /createRecord:
+ * /record/{obj}:
  *   post:
  *    consumes:
  *    - application/json
@@ -254,27 +305,48 @@ app.post('/addField',async(req,res,next)=>{
  *        description: Error to create new object
  *  
  */
-app.post('/createRecord',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
-    if(!req.body){
-        return res.status(400).json({status:false,msg:'Body is not expected'})
-    }else{
-        var schema = await mongoose.model(req.body.obj_name)
-        const record = new schema(req.body).save(function (err) {
-            if (err) return res.status(400).json({status:false,msg:'Error to create record'})
-            else return res.status(200).json({status:true,msg:req.body})
-          });
-    }
-})
+
+
+//createRecord
+app.post ('/record/:obj', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+    var schema = await mongoose.model (req.params.obj);
+    const record = new schema (req.body).save (function (err, resp) {
+      console.log ('RES', resp);
+      if (err)
+        return res
+          .status (400)
+          .json ({status: false, msg: 'Error to create record'});
+      else
+        return res.status(200).json ({
+          status: true,
+          msg: req.body,
+          endPoint: [
+            {
+              type: 'GET',
+              url: `${API_URL}record/${req.params.obj}`,
+            },
+            {
+              type: 'GET',
+              url: `${API_URL}record/${req.params.obj}/${resp._id}`,
+            },
+          ],
+        });
+    });
+  }
+});
 
 /**
  * @swagger
- * /getrecords/{obj_name}:
+ * /record/{obj}:
  *   get:
  *    desciption: Get fields
  *    parameters:
  *     - in: path
- *       name: obj_name
+ *       name: obj
  *       schema:
  *        type: string
  *       required: true
@@ -282,27 +354,73 @@ app.post('/createRecord',async(req,res,next)=>{
  *      '200': 
  *        description: Success
  */
-app.get('/getrecords/:obj_name',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
-    if(!req.body){
-        return res.status(400).json({status:false,msg:'Body is not expected'})
-    }else{
-        var schema = await mongoose.model(req.params.obj_name)
-        schema.find()
-        .exec()
-        .then(doc=>{
-            if(doc.length>0) return res.status(200).json({status:true, 'msg':doc})
-            else return res.status(200).json({status:true, msg: "record not found"})
-        })
-        .catch(err=>{
-            return res.status(404).json({success:false, message:"Something went wrong", msg: err})
-        })
+
+//getRecord
+app.get ('/record/:obj', async (req, res, next) => {
+  
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+    var schema = await mongoose.model (req.params.obj);
+    schema
+      .find ()
+      .exec ()
+      .then (doc => {
+        if (doc.length > 0){
+          let data = [];
+          doc.forEach((d)=>{
+            let body = d.toObject();
+            body.url = `${API_URL}record/${req.params.obj}/${d._id}`
+            console.log("Body",body);
+            data.push(body)
+          })
+          return res.status(200).json ({status: true, msg: data});
+        }
+         
+        else
+          return res
+            .status (200)
+            .json ({status: true, msg: 'record not found'});
+      })
+      .catch (err => {
+        return res
+          .status (404)
+          .json ({success: false, message: 'Something went wrong', msg: err});
+      });
+  }
+});
+
+
+//getRecordById
+app.get ('/record/:obj/:id', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
+
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+    var schema = await mongoose.model (req.params.obj);
+
+    let resp = await schema.findOne ({_id: req.params.id});
+    request = [
+      {
+        type: 'GET',
+        url: `${API_URL}record/${req.params.obj}`
+      }
+    ];
+
+    if (resp) {
+      res.status (200).json ({status: true, msg: resp,request:request});
+    }else {
+      
+      return res.status (400).json ({status: false, msg: 'Record not found'});
     }
-})
+  }
+});
+
 
 /**
  * @swagger 
- * /updaterecord/{id}:
+ * /record/{obj}/{id}:
  *   patch:
  *    consumes:
  *    - application/json
@@ -339,31 +457,36 @@ app.get('/getrecords/:obj_name',async(req,res,next)=>{
  *  
  */
 
-app.patch('/updaterecord/:id',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
+//patchRecord
+app.patch ('/record/:obj/:id', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
 
-    if(!req.body){
-        return res.status(400).json({status:false,msg:'Body is not expected'})
-    }else{
-        var schema = await mongoose.model(req.body.obj_name)
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+    var schema = await mongoose.model (req.params.obj);
 
-        let resp = await schema.findOne({'_id':req.params.id});
-        if(resp){
-            resp = req.body
-            schema.findByIdAndUpdate({'_id':req.params.id},resp,null,function(err,docs){
-                console.log("Docs ",docs)
-                if(err) return res.status(400).json({status:false,'msg':err})
-                else return res.status(200).json({status:true,'msg':resp})
-            })
-        }else{
-            return res.status(400).json({status:false,'msg':'Record not found'})
-        }
+    let resp = await schema.findOne ({_id: req.params.id});
+    if (resp) {
+      resp = req.body;
+      schema.findByIdAndUpdate ({_id: req.params.id}, resp, null, function (
+        err,
+        docs
+      ) {
+        console.log ('Docs ', docs);
+        if (err) return res.status (400).json ({status: false, msg: err});
+        else return res.status (200).json ({status: true, msg: resp});
+      });
+    } else {
+      return res.status (400).json ({status: false, msg: 'Record not found'});
     }
-})
+  }
+});
+
 
 /**
  * @swagger 
- * /deleterecord/{id}:
+ * /record/{obj}/{id}:
  *   delete:
  *    consumes:
  *    - application/json
@@ -396,26 +519,29 @@ app.patch('/updaterecord/:id',async(req,res,next)=>{
  *        description: Error to create new object
  *  
  */
-app.delete('/deleterecord/:id',async(req,res,next)=>{
-    console.log("ReqBody",req.body);
-    if(!req.body){
-        return res.status(400).json({status:false,msg:'Body is not expected'})
-    }else{
-        var schema = await mongoose.model(req.body.obj_name)
 
-        let resp = await schema.findOne({'_id':req.params.id});
-        if(resp){
-            resp = req.body
-            schema.findByIdAndRemove({'_id':req.params.id},function(err,docs){
-                console.log("Docs ",docs)
-                if(err) return res.status(400).json({status:false,'msg':err})
-                else return res.status(200).json({status:true,'msg':"Record deleted"})
-            })
-        }else{
-            return res.status(400).json({status:false,'msg':'Record not found'})
-        }
+//deleteRecord
+app.delete ('/record/:obj/:id', async (req, res, next) => {
+  console.log ('ReqBody', req.body);
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+    var schema = await mongoose.model (req.params.obj);
+    let resp = await schema.findOne ({_id: req.params.id});
+    if (resp) {
+      resp = req.body;
+      schema.findByIdAndRemove ({_id: req.params.id}, function (err, docs) {
+        console.log ('Docs ', docs);
+        if (err) return res.status (400).json ({status: false, msg: err});
+        else
+          return res.status (200).json ({status: true, msg: 'Record deleted'});
+      });
+    } else {
+      return res.status (400).json ({status: false, msg: 'Record not found'});
     }
+  }
+});
 
-})
-
-app.listen(PORT, () => { console.log(`Server running at http://localhost:` + PORT) })
+app.listen (PORT, () => {
+  console.log (`Server running at http://localhost:` + PORT);
+});

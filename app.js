@@ -5,8 +5,10 @@ const swaggerJsDoc = require ('swagger-jsdoc');
 const swaggerUi = require ('swagger-ui-express');
 const API_URL = 'http://localhost:5000/'
 
-const dbURL =
-  'mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/myFirstDatabase?retryWrites=true&w=majority';
+// myFirstDatabase
+let mainDbURL  = "mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/myDb?retryWrites=true&w=majority" 
+
+
 
 const app = express ();
 
@@ -32,10 +34,11 @@ app.use (express.urlencoded ({extended: false}));
 
 const PORT = process.env.PORT || 5000;
 
+
 mongoose
-  .connect (dbURL, {useNewUrlParser: true, useUnifiedTopology: true})
+  .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
   .then (() => {
-    console.log ('db Connected');
+    console.log ('Connected by main DB');
   })
   .catch (err => {
     console.log ('Failed to connect db' + err);
@@ -51,7 +54,18 @@ mongoose
  *        description: Success
  * 
  */
-app.get ('/greetme', async (req, res, next) => {
+app.get ('/greetme/:dbName', async (req, res, next) => {
+  let mainDbURL  = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${req.params.dbName}?retryWrites=true&w=majority`
+  mongoose.disconnect();
+
+  mongoose
+  .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
+  .then (() => {
+    console.log (`Connected by ${mainDbURL}`);
+  })
+  .catch (err => {
+    console.log ('Failed to connect db' + err);
+  });
   res.status (200).json ({message: 'Own by UtilLabs'});
 });
 

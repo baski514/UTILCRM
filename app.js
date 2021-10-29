@@ -56,16 +56,17 @@ mongoose
  */
 app.get ('/greetme/:dbName', async (req, res, next) => {
   let mainDbURL  = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${req.params.dbName}?retryWrites=true&w=majority`
-  mongoose.disconnect();
+  mongoose.connection.useDb(`${dbName}`)
+  // mongoose.disconnect();
 
-  mongoose
-  .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
-  .then (() => {
-    console.log (`Connected by ${mainDbURL}`);
-  })
-  .catch (err => {
-    console.log ('Failed to connect db' + err);
-  });
+  // mongoose
+  // .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
+  // .then (() => {
+  //   console.log (`Connected by ${mainDbURL}`);
+  // })
+  // .catch (err => {
+  //   console.log ('Failed to connect db' + err);
+  // });
   res.status (200).json ({message: 'Own by UtilLabs'});
 });
 

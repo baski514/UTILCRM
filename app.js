@@ -35,14 +35,14 @@ app.use (express.urlencoded ({extended: false}));
 const PORT = process.env.PORT || 5000;
 
 
-mongoose
-  .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
-  .then (() => {
-    console.log ('Connected by main DB');
-  })
-  .catch (err => {
-    console.log ('Failed to connect db' + err);
-  });
+// mongoose
+//   .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
+//   .then (() => {
+//     console.log ('Connected by main DB');
+//   })
+//   .catch (err => {
+//     console.log ('Failed to connect db' + err);
+//   });
 
 /**
  * @swagger
@@ -56,17 +56,20 @@ mongoose
  */
 app.get ('/greetme/:dbName', async (req, res, next) => {
   let mainDbURL  = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${req.params.dbName}?retryWrites=true&w=majority`
-  // mongoose.connection.useDb(`${dbName}`)
-  mongoose.disconnect();
+  mongoose.connection.useDb(`${req.params.dbName}`)
 
-  mongoose
-  .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
-  .then (() => {
-    console.log (`Connected by ${mainDbURL}`);
-  })
-  .catch (err => {
-    console.log ('Failed to connect db' + err);
-  });
+  const coll = mongoose.connection.collections
+  console.log(coll)
+  // mongoose.disconnect();
+
+  // mongoose
+  // .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
+  // .then (() => {
+  //   console.log (`Connected by ${mainDbURL}`);
+  // })
+  // .catch (err => {
+  //   console.log ('Failed to connect db' + err);
+  // });
   res.status (200).json ({message: 'Own by UtilLabs'});
 });
 

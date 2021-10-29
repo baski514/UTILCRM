@@ -4,11 +4,7 @@ const cors = require ('cors');
 const swaggerJsDoc = require ('swagger-jsdoc');
 const swaggerUi = require ('swagger-ui-express');
 const API_URL = 'http://localhost:5000/'
-
-// myFirstDatabase
-let mainDbURL  = "mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/myDb?retryWrites=true&w=majority" 
-
-
+var globalConnectionStack = [];
 
 const app = express ();
 
@@ -44,6 +40,25 @@ const PORT = process.env.PORT || 5000;
 //     console.log ('Failed to connect db' + err);
 //   });
 
+app.use(function(req, res, next) {
+  
+  var type = req.headers.type;
+  
+  console.log(type);
+
+  var connection_uri = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${type}?retryWrites=true&w=majority`;
+
+  if (typeof globalConnectionStack[type] === 'undefined') {
+    //initiating one time unique connection 
+      globalConnectionStack[type] = {};
+      globalConnectionStack[type].db = mongoose.createConnection(connection_uri);
+
+      //save user model to the corresponding stack
+      // globalConnectionStack[type].user = globalConnectionStack[type].db.model('User', UserSchema);
+  }
+  return next();
+});
+
 /**
  * @swagger
  * /greetme:
@@ -56,10 +71,10 @@ const PORT = process.env.PORT || 5000;
  */
 app.get ('/greetme/:dbName', async (req, res, next) => {
   let mainDbURL  = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${req.params.dbName}?retryWrites=true&w=majority`
-  mongoose.connection.useDb(`${req.params.dbName}`)
+  // mongoose.connection.useDb(`${req.params.dbName}`)
 
-  const coll = mongoose.connection.collections
-  console.log(coll)
+  // const coll = mongoose.connection.collections
+  // console.log(coll)
   // mongoose.disconnect();
 
   // mongoose
@@ -107,6 +122,7 @@ app.get ('/greetme/:dbName', async (req, res, next) => {
 //createObject
 app.post ('/object', async (req, res, next) => {
   console.log ('ReqBody', req.body);
+  const type = req.headers.type
 
   let fields = {};
   if (req.body.fields) {
@@ -118,7 +134,7 @@ app.post ('/object', async (req, res, next) => {
 
   try {
     var newObj = new mongoose.Schema (fields);
-    mongoose.model (req.body.modelName, newObj);
+    globalConnectionStack[type].db.model (req.body.modelName, newObj);
     return res.status (200).json ({
       status: true,
       msg: 'New Object Created',
@@ -176,8 +192,9 @@ app.post ('/object', async (req, res, next) => {
 //getObject
 
 app.get ('/object', async (req, res, next) => {
+  const type = req.headers.type
   console.log ('ReqBody', req.body);
-  const collections = Object.keys (mongoose.connection.collections);
+  const collections = Object.keys (globalConnectionStack[type].db.collections);
   return res.status (200).json ({status: true, msg: collections});
 });
 
@@ -201,8 +218,10 @@ app.get ('/object', async (req, res, next) => {
 //getFields
 app.get ('/field/:obj', async (req, res, next) => {
   console.log ('ObjectName', req.params.obj_name);
+  const type = req.headers.type;
+
   try {
-    var schema = await mongoose.model (req.params.obj).schema;
+    var schema = await globalConnectionStack[type].db.model (req.params.obj).schema;
     if (schema) {
       const fields = Object.values (schema.paths);
 
@@ -259,9 +278,10 @@ app.get ('/field/:obj', async (req, res, next) => {
 //createField
 app.post ('/field/:obj', async (req, res, next) => {
   console.log ('ReqBody', req.body);
+  const type = req.headers.type;
 
   try {
-    var schema = await mongoose.model (req.params.obj).schema;
+    var schema = await globalConnectionStack[type].db.model (req.params.obj).schema;
     let fields;
 
     if (req.body.fieldType) {
@@ -328,16 +348,20 @@ app.post ('/field/:obj', async (req, res, next) => {
 //createRecord
 app.post ('/record/:obj', async (req, res, next) => {
   console.log ('ReqBody', req.body);
+  const type = req.headers.type;
+
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
   } else {
-    var schema = await mongoose.model (req.params.obj);
+    var schema = await globalConnectionStack[type].db.model (req.params.obj);
     const record = new schema (req.body).save (function (err, resp) {
       console.log ('RES', resp);
-      if (err)
+      if (err){
+        console.log(err)
         return res
           .status (400)
           .json ({status: false, msg: 'Error to create record'});
+      }    
       else
         return res.status(200).json ({
           status: true,
@@ -375,11 +399,12 @@ app.post ('/record/:obj', async (req, res, next) => {
 
 //getRecord
 app.get ('/record/:obj', async (req, res, next) => {
-  
+  const type = req.headers.type;
+
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
   } else {
-    var schema = await mongoose.model (req.params.obj);
+    var schema = await globalConnectionStack[type].db.model (req.params.obj);
     schema
       .find ()
       .exec ()
@@ -411,12 +436,14 @@ app.get ('/record/:obj', async (req, res, next) => {
 
 //getRecordById
 app.get ('/record/:obj/:id', async (req, res, next) => {
+  const type = req.headers.type;
+
   console.log ('ReqBody', req.body);
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
   } else {
-    var schema = await mongoose.model (req.params.obj);
+    var schema = await globalConnectionStack[type].db.model (req.params.obj);
 
     let resp = await schema.findOne ({_id: req.params.id});
     request = [
@@ -478,11 +505,13 @@ app.get ('/record/:obj/:id', async (req, res, next) => {
 //patchRecord
 app.patch ('/record/:obj/:id', async (req, res, next) => {
   console.log ('ReqBody', req.body);
+  const type = req.headers.type;
+
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
   } else {
-    var schema = await mongoose.model (req.params.obj);
+    var schema = await globalConnectionStack[type].db.model (req.params.obj);
 
     let resp = await schema.findOne ({_id: req.params.id});
     if (resp) {
@@ -541,10 +570,12 @@ app.patch ('/record/:obj/:id', async (req, res, next) => {
 //deleteRecord
 app.delete ('/record/:obj/:id', async (req, res, next) => {
   console.log ('ReqBody', req.body);
+  const type = req.headers.type;
+
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
   } else {
-    var schema = await mongoose.model (req.params.obj);
+    var schema = await globalConnectionStack[type].db.model (req.params.obj);
     let resp = await schema.findOne ({_id: req.params.id});
     if (resp) {
       resp = req.body;

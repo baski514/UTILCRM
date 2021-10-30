@@ -6,6 +6,8 @@ const swaggerUi = require ('swagger-ui-express');
 const API_URL = 'http://localhost:5000/'
 var globalConnectionStack = [];
 
+// https://github.com/devexpat/Simple-Hack-Use-multipple-mongodb-databases-in-a-nodejs-express-mongodb-application/blob/master/index.js
+
 const app = express ();
 
 const swaggerOptions = {
@@ -49,12 +51,9 @@ app.use(function(req, res, next) {
   var connection_uri = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${type}?retryWrites=true&w=majority`;
 
   if (typeof globalConnectionStack[type] === 'undefined') {
-    //initiating one time unique connection 
       globalConnectionStack[type] = {};
       globalConnectionStack[type].db = mongoose.createConnection(connection_uri);
-
-      //save user model to the corresponding stack
-      // globalConnectionStack[type].user = globalConnectionStack[type].db.model('User', UserSchema);
+      
   }
   return next();
 });
@@ -70,23 +69,69 @@ app.use(function(req, res, next) {
  * 
  */
 app.get ('/greetme/:dbName', async (req, res, next) => {
-  let mainDbURL  = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${req.params.dbName}?retryWrites=true&w=majority`
-  // mongoose.connection.useDb(`${req.params.dbName}`)
-
-  // const coll = mongoose.connection.collections
-  // console.log(coll)
-  // mongoose.disconnect();
-
-  // mongoose
-  // .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
-  // .then (() => {
-  //   console.log (`Connected by ${mainDbURL}`);
-  // })
-  // .catch (err => {
-  //   console.log ('Failed to connect db' + err);
-  // });
   res.status (200).json ({message: 'Own by UtilLabs'});
 });
+
+
+app.post('/signup',async (req, res, next)=>{
+  const type = req.headers.type;
+
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+
+
+    let fields = {};
+    var schema;
+
+    fields.username = {type: String,unique:true};
+    fields.password = {type: String};
+    fields.hasVerified = {type: Boolean};
+    fields.password = {type: String};
+
+    try{
+      var newObj = new mongoose.Schema (fields);
+      schema = await globalConnectionStack[type].db.model("UsersAuth", newObj);
+    }catch(e){
+      schema = await globalConnectionStack[type].db.model("UsersAuth");
+    }
+   
+
+    req.body.hasVerified = false;
+
+    const record = new schema (req.body).save (function (err, resp) {
+      console.log ('RES', resp);
+      if (err){
+        console.log(err)
+        return res
+          .status (400)
+          .json ({status: false, msg: 'Error to create record'});
+      }    
+      else{
+
+        res.status(200).json({msg: resp,status:true})
+
+        // let fields = {};
+
+        // fields.Id = {type: String};
+        // fields.Name = {type: String};
+
+        // var newObj = new mongoose.Schema (fields);
+        // globalConnectionStack[type].db.model ("account", newObj);
+        // globalConnectionStack[type].db.model ("contact", newObj);
+        // globalConnectionStack[type].db.model ("lead", newObj);
+        
+
+
+        // return res.status(200).json ({
+        //   status: true,
+        //   msg: req.body
+        // });
+      }
+    });
+  }
+
+})
 
 /**
  * @swagger 

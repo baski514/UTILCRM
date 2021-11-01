@@ -3,8 +3,14 @@ const mongoose = require ('mongoose');
 const cors = require ('cors');
 const swaggerJsDoc = require ('swagger-jsdoc');
 const swaggerUi = require ('swagger-ui-express');
-const API_URL = 'http://localhost:5000/'
+const jwt = require ('jsonwebtoken');
+
+require ('dotenv').config ();
+
+const API_URL = 'http://localhost:5000/';
 var globalConnectionStack = [];
+
+// https://github.com/devexpat/Simple-Hack-Use-multipple-mongodb-databases-in-a-nodejs-express-mongodb-application/blob/master/index.js
 
 const app = express ();
 
@@ -30,33 +36,42 @@ app.use (express.urlencoded ({extended: false}));
 
 const PORT = process.env.PORT || 5000;
 
+app.use (async function (req, res, next) {
+  console.log("runn",req.headers)
+  var authHeader = req.headers.authorization;
+  var type;
+  var connection_uri;
 
-// mongoose
-//   .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
-//   .then (() => {
-//     console.log ('Connected by main DB');
-//   })
-//   .catch (err => {
-//     console.log ('Failed to connect db' + err);
-//   });
-
-app.use(function(req, res, next) {
-  
-  var type = req.headers.type;
-  
-  console.log(type);
-
-  var connection_uri = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${type}?retryWrites=true&w=majority`;
-
-  if (typeof globalConnectionStack[type] === 'undefined') {
-    //initiating one time unique connection 
-      globalConnectionStack[type] = {};
-      globalConnectionStack[type].db = mongoose.createConnection(connection_uri);
-
-      //save user model to the corresponding stack
-      // globalConnectionStack[type].user = globalConnectionStack[type].db.model('User', UserSchema);
+  if (!type && authHeader) {
+    const token = authHeader && authHeader.split (' ')[1];
+    if (token == null) {
+      return res.sendStatus (401);
+    }
+    type = await jwt.verify (
+      token,
+      process.env.JSON_SECRET,
+      async (err, user) => {
+        if (user) {
+          req.user = user;
+          return user.user.orgId;
+        }
+      }
+    );
+  } else {
+    type = await 'users';
   }
-  return next();
+
+  if (type != null) {
+    connection_uri = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${type}?retryWrites=true&w=majority`;
+    if (typeof globalConnectionStack[type] === 'undefined') {
+      connection_uri = await `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${type}?retryWrites=true&w=majority`;
+      globalConnectionStack[type] = {};
+      globalConnectionStack[type].db = mongoose.createConnection (
+        connection_uri
+      );
+    }
+  }
+  return next ();
 });
 
 /**
@@ -70,22 +85,166 @@ app.use(function(req, res, next) {
  * 
  */
 app.get ('/greetme/:dbName', async (req, res, next) => {
-  let mainDbURL  = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${req.params.dbName}?retryWrites=true&w=majority`
-  // mongoose.connection.useDb(`${req.params.dbName}`)
-
-  // const coll = mongoose.connection.collections
-  // console.log(coll)
-  // mongoose.disconnect();
-
-  // mongoose
-  // .connect (mainDbURL, {useNewUrlParser: true, useUnifiedTopology: true})
-  // .then (() => {
-  //   console.log (`Connected by ${mainDbURL}`);
-  // })
-  // .catch (err => {
-  //   console.log ('Failed to connect db' + err);
-  // });
   res.status (200).json ({message: 'Own by UtilLabs'});
+});
+
+app.post ('/signup', async (req, res, next) => {
+  //users
+  const type = 'users';
+  let fields = {};
+  var schema;
+
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is not expected'});
+  } else {
+    const {username, password} = req.body;
+
+    try {
+      fields.username = {type: String, unique: true};
+      fields.password = {type: String};
+      fields.hasVerified = {type: Boolean};
+      fields.access_token = {type: String};
+      fields.orgId = {type: String};
+
+      console.log ('AUTH', type);
+
+      var newObj = new mongoose.Schema (fields);
+      schema = await globalConnectionStack[type].db.model ('auth', newObj);
+    } catch (e) {
+      console.log ('Error', e);
+      schema = await globalConnectionStack[type].db.model ('auth');
+    }
+
+    let user_exist = await schema.findOne ({username: username});
+    if (user_exist) {
+      res
+        .status (400)
+        .json ({status: false, msg: 'Username Taken! choose another'});
+    } else {
+      req.body.hasVerified = false;
+      const record = new schema (req.body).save (function (err, resp) {
+        console.log ('RES', resp);
+        if (err) {
+          console.log (err);
+          return res
+            .status (400)
+            .json ({status: false, msg: 'Error to create record'});
+        } else {
+          res.status (200).json ({msg: resp, status: true});
+
+          // return res.status(200).json ({
+          //   status: true,
+          //   msg: req.body
+          // });
+        }
+      });
+    }
+  }
+});
+
+app.post ('/login', async (req, res) => {
+  let type = 'users';
+  let schema, orgId;
+  let users = {};
+
+  if (!req.body) {
+    return res.status (400).json ({status: false, msg: 'Body is expected'});
+  } else {
+    const {username, password} = req.body;
+    const user = {name: username};
+
+    try {
+      users.username = {type: String, unique: true};
+      users.password = {type: String};
+      users.hasVerified = {type: Boolean};
+      users.access_token = {type: String};
+      users.orgId = {type: String};
+
+      var newObj = new mongoose.Schema (users);
+      schema = await globalConnectionStack[type].db.model ('auth', newObj);
+      console.log ('Try');
+    } catch (e) {
+      console.log ('Error', e);
+      schema = await globalConnectionStack[type].db.model ('auth');
+      console.log ('Catch');
+    }
+
+    let userResp = await schema.findOne ({username: username});
+    if (userResp) {
+      if (userResp.password === password) {
+        orgId = `${userResp.username}DB`;
+
+        userResp.orgId = orgId;
+        const user = {user: userResp};
+        let accessToken;
+
+        if (userResp.access_token) {
+          accessToken = await userResp.access_token;
+        } else {
+          accessToken = await generateAccessToken (user);
+        }
+
+        const refreshToken = jwt.sign (user, process.env.JSON_SECRET);
+
+        if (!userResp.hasVerified) {
+          await schema.findOneAndUpdate (
+            {username: username},
+            {access_token: accessToken, orgId: orgId, hasVerified: true}
+          );
+
+          type = orgId;
+          var connection_uri = `mongodb+srv://baski:admin123@cluster0.hlca8.mongodb.net/${type}?retryWrites=true&w=majority`;
+          globalConnectionStack[type] = {};
+          // mongoose.disconnect();
+          globalConnectionStack[type].db = mongoose.createConnection (
+            connection_uri
+          );
+
+          let fields = {};
+          fields.Id = {type: String};
+          fields.Name = {type: String};
+
+          var newObj = new mongoose.Schema (fields);
+          var accSchema = await globalConnectionStack[type].db.model (
+            'account',
+            newObj
+          );
+          var contactSchema = await globalConnectionStack[type].db.model (
+            'contact',
+            newObj
+          );
+          var leadSchema = await globalConnectionStack[type].db.model (
+            'lead',
+            newObj
+          );
+          var userSchema = await globalConnectionStack[type].db.model (
+            'user',
+            newObj
+          );
+          let body = {Id: userResp._id, Name: username};
+          await new userSchema (body).save ();
+        } else {
+          await schema.findOneAndUpdate (
+            {username: username},
+            {access_token: accessToken}
+          );
+        }
+
+        return res
+          .status (200)
+          .json ({
+            status: true,
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            orgId: orgId,
+          });
+      } else {
+        res.status (400).json ({status: false, msg: 'Incorrect Password'});
+      }
+    } else {
+      res.status (400).json ({status: false, msg: "Account doesn't exist"});
+    }
+  }
 });
 
 /**
@@ -121,8 +280,10 @@ app.get ('/greetme/:dbName', async (req, res, next) => {
 
 //createObject
 app.post ('/object', async (req, res, next) => {
-  console.log ('ReqBody', req.body);
-  const type = req.headers.type
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   let fields = {};
   if (req.body.fields) {
@@ -139,37 +300,37 @@ app.post ('/object', async (req, res, next) => {
       status: true,
       msg: 'New Object Created',
 
-      request:[
-          {
-              type:'GET',
-              url: `${API_URL}record/${req.body.modelName}`
-          },
-          
-          {
-              type:'POST',
-              url: `${API_URL}record/${req.body.modelName}`
-          },
-          {
-              type:'GET',
-              url: `${API_URL}record/${req.body.modelName}/{id}`
-          },
-          {
-              type:'PATCH',
-              url: `${API_URL}record/${req.body.modelName}/{id}`
-          },
-          {
-              type:'DELETE',
-              url: `${API_URL}record/${req.body.modelName}/{id}`
-          },
-            {
-                type: 'POST',
-                url: `${API_URL}field/${req.body.modelName}`,
-            },
-            {
-                type: 'GET',
-                url: `${API_URL}field/${req.body.modelName}`,
-            }
-      ]
+      request: [
+        {
+          type: 'GET',
+          url: `${API_URL}record/${req.body.modelName}`,
+        },
+
+        {
+          type: 'POST',
+          url: `${API_URL}record/${req.body.modelName}`,
+        },
+        {
+          type: 'GET',
+          url: `${API_URL}record/${req.body.modelName}/{id}`,
+        },
+        {
+          type: 'PATCH',
+          url: `${API_URL}record/${req.body.modelName}/{id}`,
+        },
+        {
+          type: 'DELETE',
+          url: `${API_URL}record/${req.body.modelName}/{id}`,
+        },
+        {
+          type: 'POST',
+          url: `${API_URL}field/${req.body.modelName}`,
+        },
+        {
+          type: 'GET',
+          url: `${API_URL}field/${req.body.modelName}`,
+        },
+      ],
     });
   } catch (error) {
     console.log (error);
@@ -192,7 +353,11 @@ app.post ('/object', async (req, res, next) => {
 //getObject
 
 app.get ('/object', async (req, res, next) => {
-  const type = req.headers.type
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
+
   console.log ('ReqBody', req.body);
   const collections = Object.keys (globalConnectionStack[type].db.collections);
   return res.status (200).json ({status: true, msg: collections});
@@ -214,14 +379,16 @@ app.get ('/object', async (req, res, next) => {
  *        description: Success
  */
 
-
 //getFields
 app.get ('/field/:obj', async (req, res, next) => {
-  console.log ('ObjectName', req.params.obj_name);
-  const type = req.headers.type;
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   try {
-    var schema = await globalConnectionStack[type].db.model (req.params.obj).schema;
+    var schema = await globalConnectionStack[type].db.model (req.params.obj)
+      .schema;
     if (schema) {
       const fields = Object.values (schema.paths);
 
@@ -277,11 +444,14 @@ app.get ('/field/:obj', async (req, res, next) => {
 
 //createField
 app.post ('/field/:obj', async (req, res, next) => {
-  console.log ('ReqBody', req.body);
-  const type = req.headers.type;
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   try {
-    var schema = await globalConnectionStack[type].db.model (req.params.obj).schema;
+    var schema = await globalConnectionStack[type].db.model (req.params.obj)
+      .schema;
     let fields;
 
     if (req.body.fieldType) {
@@ -298,12 +468,12 @@ app.post ('/field/:obj', async (req, res, next) => {
     res.status (200).json ({
       status: true,
       msg: 'New Field created',
-      request:[
-          {
-              type:'GET',
-              url:`${API_URL}field/${req.params.obj}`
-          }
-      ]
+      request: [
+        {
+          type: 'GET',
+          url: `${API_URL}field/${req.params.obj}`,
+        },
+      ],
     });
   } catch (error) {
     console.log (error);
@@ -344,11 +514,12 @@ app.post ('/field/:obj', async (req, res, next) => {
  *  
  */
 
-
 //createRecord
 app.post ('/record/:obj', async (req, res, next) => {
-  console.log ('ReqBody', req.body);
-  const type = req.headers.type;
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
@@ -356,16 +527,15 @@ app.post ('/record/:obj', async (req, res, next) => {
     var schema = await globalConnectionStack[type].db.model (req.params.obj);
     const record = new schema (req.body).save (function (err, resp) {
       console.log ('RES', resp);
-      if (err){
-        console.log(err)
+      if (err) {
+        console.log (err);
         return res
           .status (400)
           .json ({status: false, msg: 'Error to create record'});
-      }    
-      else
-        return res.status(200).json ({
+      } else
+        return res.status (200).json ({
           status: true,
-          msg: req.body,
+          msg: resp,
           endPoint: [
             {
               type: 'GET',
@@ -399,28 +569,43 @@ app.post ('/record/:obj', async (req, res, next) => {
 
 //getRecord
 app.get ('/record/:obj', async (req, res, next) => {
-  const type = req.headers.type;
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+
+  const type = req.user.user.orgId;
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
   } else {
-    var schema = await globalConnectionStack[type].db.model (req.params.obj);
+    var schema;
+    try {
+      let fields = {};
+      fields.Id = {type: String};
+      fields.Name = {type: String};
+      var newObj = new mongoose.Schema (fields);
+      schema = await globalConnectionStack[type].db.model (
+        req.params.obj,
+        newObj
+      );
+    } catch (error) {
+      schema = await globalConnectionStack[type].db.model (req.params.obj);
+    }
+
     schema
       .find ()
       .exec ()
       .then (doc => {
-        if (doc.length > 0){
+        if (doc.length > 0) {
           let data = [];
-          doc.forEach((d)=>{
-            let body = d.toObject();
-            body.url = `${API_URL}record/${req.params.obj}/${d._id}`
-            console.log("Body",body);
-            data.push(body)
-          })
-          return res.status(200).json ({status: true, msg: data});
-        }
-         
-        else
+          doc.forEach (d => {
+            let body = d.toObject ();
+            body.url = `${API_URL}record/${req.params.obj}/${d._id}`;
+            console.log ('Body', body);
+            data.push (body);
+          });
+          return res.status (200).json ({status: true, msg: data});
+        } else
           return res
             .status (200)
             .json ({status: true, msg: 'record not found'});
@@ -433,12 +618,12 @@ app.get ('/record/:obj', async (req, res, next) => {
   }
 });
 
-
 //getRecordById
 app.get ('/record/:obj/:id', async (req, res, next) => {
-  const type = req.headers.type;
-
-  console.log ('ReqBody', req.body);
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
@@ -449,19 +634,17 @@ app.get ('/record/:obj/:id', async (req, res, next) => {
     request = [
       {
         type: 'GET',
-        url: `${API_URL}record/${req.params.obj}`
-      }
+        url: `${API_URL}record/${req.params.obj}`,
+      },
     ];
 
     if (resp) {
-      res.status (200).json ({status: true, msg: resp,request:request});
-    }else {
-      
+      res.status (200).json ({status: true, msg: resp, request: request});
+    } else {
       return res.status (400).json ({status: false, msg: 'Record not found'});
     }
   }
 });
-
 
 /**
  * @swagger 
@@ -504,9 +687,10 @@ app.get ('/record/:obj/:id', async (req, res, next) => {
 
 //patchRecord
 app.patch ('/record/:obj/:id', async (req, res, next) => {
-  console.log ('ReqBody', req.body);
-  const type = req.headers.type;
-
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
@@ -529,7 +713,6 @@ app.patch ('/record/:obj/:id', async (req, res, next) => {
     }
   }
 });
-
 
 /**
  * @swagger 
@@ -569,8 +752,10 @@ app.patch ('/record/:obj/:id', async (req, res, next) => {
 
 //deleteRecord
 app.delete ('/record/:obj/:id', async (req, res, next) => {
-  console.log ('ReqBody', req.body);
-  const type = req.headers.type;
+  if (!req.user) {
+    return res.status (400).json ({status: false, msg: 'unAuthorized'});
+  }
+  const type = req.user.user.orgId;
 
   if (!req.body) {
     return res.status (400).json ({status: false, msg: 'Body is not expected'});
@@ -590,6 +775,10 @@ app.delete ('/record/:obj/:id', async (req, res, next) => {
     }
   }
 });
+
+async function generateAccessToken (user) {
+  return jwt.sign (user, process.env.JSON_SECRET);
+}
 
 app.listen (PORT, () => {
   console.log (`Server running at http://localhost:` + PORT);
